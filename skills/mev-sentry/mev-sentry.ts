@@ -102,13 +102,6 @@ program
   .description("Continuously monitor mempool for MEV signatures")
   .option("-i, --interval <number>", "Polling interval in seconds", "10")
   .action(async (options) => {
-    console.log(JSON.stringify({
-      status: "starting",
-      mode: "polling",
-      interval: `${options.interval}s`,
-      timestamp: new Date().toISOString()
-    }));
-    
     // In a real CLI this would loop, but for agent-skill compliance 
     // we perform one high-fidelity scan per invocation or return a 'watching' state.
     const data = await getMempool(100);
@@ -121,10 +114,45 @@ program
     
     console.log(JSON.stringify({
       status: "active",
+      mode: "polling",
+      interval: `${options.interval}s`,
       current_alerts: alerts.length,
       top_alert: alerts.length > 0 ? alerts[0].tx_id : null,
       timestamp: new Date().toISOString()
     }, null, 2));
+  });
+
+program
+  .command("doctor")
+  .description("Check connectivity to the Hiro API")
+  .action(async () => {
+    try {
+      const start = Date.now();
+      const response = await fetch(`${HIRO_API_BASE}/extended/v1/status`);
+      const latency = Date.now() - start;
+      if (response.ok) {
+        const data = await response.json();
+        console.log(JSON.stringify({
+          status: "healthy",
+          latency: `${latency}ms`,
+          network: data.network_id,
+          chain_tip: data.stacks_tip_height,
+          timestamp: new Date().toISOString()
+        }, null, 2));
+      } else {
+        console.log(JSON.stringify({
+          status: "unhealthy",
+          error: `Hiro API returned ${response.status}`,
+          timestamp: new Date().toISOString()
+        }, null, 2));
+      }
+    } catch (error: any) {
+      console.log(JSON.stringify({
+        status: "unhealthy",
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }, null, 2));
+    }
   });
 
 program.parse();
