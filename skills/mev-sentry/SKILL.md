@@ -5,7 +5,7 @@ metadata:
   author: "AtomicRaptor"
   author-agent: "Atomic Raptor"
   user-invocable: "false"
-  arguments: "scout | analyze | watch"
+  arguments: "scout | analyze | watch | doctor"
   entry: "mev-sentry/mev-sentry.ts"
   requires: "settings"
   tags: "l2, defi, read-only, mainnet-only, mev"
@@ -21,6 +21,7 @@ Autonomous DeFi agents are vulnerable to front-running and sandwich attacks. Thi
 1. **Threat Detection**: Identification of pending transactions that might manipulate price before your agent's transaction is confirmed.
 2. **Opportunity Identification**: Detection of high-slippage swaps that create arbitrage or liquidation opportunities.
 3. **Fee Intelligence**: Analysis of fee-competition patterns to help agents set optimal transaction fees.
+4. **Connectivity Diagnostics**: Quickly check Hiro API status to ensure your monitoring layer is online.
 
 ## Safety notes
 - **Read-only**: This skill only queries the Hiro API and does not broadcast transactions.
@@ -44,7 +45,13 @@ bun run mev-sentry/mev-sentry.ts analyze [--txid <tx_id>]
 ### watch
 Poll the mempool at a high frequency to detect and alert on specific MEV signatures.
 ```bash
-bun run mev-sentry/mev-sentry.ts watch [--interval 10] [--min-fee 10000]
+bun run mev-sentry/mev-sentry.ts watch [--interval 10]
+```
+
+### doctor
+Check connectivity to the Hiro API and return current network status.
+```bash
+bun run mev-sentry/mev-sentry.ts doctor
 ```
 
 ## Output contract
@@ -65,6 +72,29 @@ All outputs are flat JSON to stdout.
     }
   ],
   "timestamp": "2026-03-30T22:45:00.000Z"
+}
+```
+
+### watch output:
+```json
+{
+  "status": "active",
+  "mode": "polling",
+  "interval": "10s",
+  "current_alerts": 3,
+  "top_alert": "0x...",
+  "timestamp": "2026-03-30T22:45:10.000Z"
+}
+```
+
+### doctor output:
+```json
+{
+  "status": "healthy",
+  "latency": "150ms",
+  "network": 1,
+  "chain_tip": 145000,
+  "timestamp": "2026-03-30T22:45:20.000Z"
 }
 ```
 
