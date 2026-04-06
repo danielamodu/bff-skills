@@ -8,7 +8,7 @@ metadata:
   arguments: "scout | analyze | watch | doctor"
   entry: "mev-sentry/mev-sentry.ts"
   requires: "settings"
-  tags: "l2, defi, read-only, mainnet-only, mev"
+  tags: "defi, read-only, mainnet-only, infrastructure"
 ---
 
 # MEV Sentry Skill
@@ -30,8 +30,8 @@ Autonomous DeFi agents are vulnerable to front-running and sandwich attacks. Thi
 
 ## Commands
 
-### scout
-Fetch a summary of current mempool activity, filtering for high-fee or DEX-related transactions.
+### monitor
+Fetch current mempool activity and watch for MEV signatures.
 ```bash
 bun run mev-sentry/mev-sentry.ts scout [--limit 50]
 ```
@@ -40,12 +40,6 @@ bun run mev-sentry/mev-sentry.ts scout [--limit 50]
 Perform deep analysis on a specific transaction or the top of the mempool to detect sandwich or front-running patterns.
 ```bash
 bun run mev-sentry/mev-sentry.ts analyze [--txid <tx_id>]
-```
-
-### watch
-Poll the mempool at a high frequency to detect and alert on specific MEV signatures.
-```bash
-bun run mev-sentry/mev-sentry.ts watch [--interval 10]
 ```
 
 ### doctor
@@ -72,18 +66,6 @@ All outputs are flat JSON to stdout.
     }
   ],
   "timestamp": "2026-03-30T22:45:00.000Z"
-}
-```
-
-### watch output:
-```json
-{
-  "status": "active",
-  "mode": "polling",
-  "interval": "10s",
-  "current_alerts": 3,
-  "top_alert": "0x...",
-  "timestamp": "2026-03-30T22:45:10.000Z"
 }
 ```
 
