@@ -1,7 +1,6 @@
 ---
 name: bitflow-dlmm-fee-scout
 description: "Scans all active Bitflow DLMM pools and ranks them by fee efficiency, flagging pools where 24h APR diverges from 30-day baseline — signaling temporary yield spikes for agent liquidity repositioning."
-entry: "bitflow-dlmm-fee-scout/bitflow-dlmm-fee-scout.ts"
 metadata:
   version: "1.0.0"
   author: "atomic-raptor"
@@ -10,6 +9,7 @@ metadata:
   requires: "none"
   user-invocable: "true"
   arguments: "status | run | doctor"
+  entry: "bitflow-dlmm-fee-scout/bitflow-dlmm-fee-scout.ts"
 ---
 
 # bitflow-dlmm-fee-scout
