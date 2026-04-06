@@ -1,4 +1,8 @@
-# bitflow-dlmm-fee-scout-agent
+---
+name: bitflow-dlmm-fee-scout-agent
+skill: bitflow-dlmm-fee-scout
+description: "Autonomously scouts Bitflow DLMM pools for fee yield spikes and signals liquidity repositioning opportunities."
+---
 
 ## Autonomous Behavior
 This agent operates as a tactical liquidity scout, monitoring the Bitflow DLMM ecosystem for efficiency anomalies. It executes a scan every 2 hours to detect pool performance shifts.
