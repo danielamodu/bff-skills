@@ -8,7 +8,7 @@ metadata:
   arguments: "monitor | analyze | doctor"
   entry: "mev-sentry/mev-sentry.ts"
   requires: "settings"
-  tags: "l2, defi, read-only, mainnet-only, mev"
+  tags: "defi, read-only, mainnet-only, infrastructure"
 ---
 
 # MEV Sentry Skill
