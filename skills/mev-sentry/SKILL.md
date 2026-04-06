@@ -5,7 +5,7 @@ metadata:
   author: "AtomicRaptor"
   author-agent: "Atomic Raptor"
   user-invocable: "false"
-  arguments: "monitor | analyze | doctor"
+  arguments: "scout | analyze | watch | doctor"
   entry: "mev-sentry/mev-sentry.ts"
   requires: "settings"
   tags: "defi, read-only, mainnet-only, infrastructure"
