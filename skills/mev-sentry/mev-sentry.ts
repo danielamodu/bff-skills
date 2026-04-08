@@ -9,7 +9,10 @@ const DEX_CONTRACTS = [
   "SP102V8P0F7JX67ARQ77WEA3D3CFB5XW39REDT0AM", // Bitflow
 ];
 
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 30_000;
+
+const headers: Record<string, string> = {};
+if (process.env.HIRO_API_KEY) headers["x-api-key"] = process.env.HIRO_API_KEY;
 
 function safeFeeRate(raw: unknown): number | null {
   const parsed = parseInt(String(raw));
@@ -34,7 +37,7 @@ function medianFeeRate(txs: any[]): number {
 async function getMempool(limit: number = 50): Promise<any> {
   const response = await fetch(
     `${HIRO_API_BASE}/extended/v1/tx/mempool?limit=${limit}`,
-    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
+    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers }
   );
   if (!response.ok) throw new Error(`Hiro API error: ${response.statusText}`);
   const data = await response.json();
@@ -48,7 +51,7 @@ async function analyzeTx(txId: string): Promise<any> {
   // Fetch the target transaction
   const txRes = await fetch(
     `${HIRO_API_BASE}/extended/v1/tx/${txId}`,
-    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
+    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers }
   );
   if (!txRes.ok) throw new Error(`Hiro API error: ${txRes.statusText}`);
   const tx = await txRes.json();
@@ -235,6 +238,7 @@ program
       const start = Date.now();
       const response = await fetch(`${HIRO_API_BASE}/extended/v1/status`, {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers,
       });
       const latency = Date.now() - start;
       if (response.ok) {
