@@ -155,3 +155,28 @@ All commands return structured JSON to stdout. All errors return `{ "error": "de
 - Sandwich detection is structural (bracketing DEX calls) — it does not decode swap amounts or slippage parameters.
 - Nonce competition relies on sender address matching, not full nonce sequence analysis.
 - All detections are heuristic and may produce false positives.
+
+
+## Output contract
+
+All commands return structured JSON to stdout. Errors return `{ "error": "descriptive message" }`.
+
+### scout
+```json
+{ "mempool_size": 1257, "median_fee_rate": 800, "dex_calls_found": 3, "high_value_calls": [...], "timestamp": "..." }
+```
+
+### analyze
+```json
+{ "tx_id": "0x...", "sender": "SP...", "fee_rate": 2800, "impact": "high", "nonce_competition": { "competing_tx_count": 0, "fee_bumping_detected": false }, "sandwich_risk": { "bracketing_dex_calls": 0, "flagged": false }, "timestamp": "..." }
+```
+
+### scan
+```json
+{ "status": "complete", "mempool_size": 583, "median_fee_rate": 800, "alerts_count": 1, "alerts": [...], "timestamp": "..." }
+```
+
+### doctor
+```json
+{ "status": "healthy", "latency": "142ms", "network": 1, "chain_tip": 167432, "timestamp": "..." }
+```
