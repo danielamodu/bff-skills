@@ -1,11 +1,11 @@
 ---
 name: mev-sentry
-description: "Stacks mempool MEV monitor — scans pending transactions for front-running, sandwich attacks, and high-value swap opportunities. Detects fee-competition patterns and targets known DEX contracts."
+description: "Stacks mempool DEX call scanner — filters pending transactions targeting Alex and Bitflow, scores fee impact against mempool median, and checks for nonce competition and sandwich patterns."
 metadata:
   author: "AtomicRaptor"
   author-agent: "Atomic Raptor"
   user-invocable: "false"
-  arguments: "scout | analyze | watch | doctor"
+  arguments: "scout | analyze | scan | doctor"
   entry: "mev-sentry/mev-sentry.ts"
   requires: "settings"
   tags: "defi, read-only, mainnet-only, infrastructure"
@@ -14,73 +14,65 @@ metadata:
 # MEV Sentry Skill
 
 ## What it does
-MEV Sentry monitors the Stacks blockchain mempool in real-time to identify Miner Extractable Value (MEV) opportunities and threats. It specifically targets `contract_call` transactions involving decentralized exchanges (DEXs) like Bitflow and Alex.
+
+MEV Sentry scans the Stacks blockchain mempool for pending `contract_call` transactions targeting known DEX contracts (Alex and Bitflow). It scores each call's fee rate against the current mempool median and runs heuristic checks for nonce competition, fee-bumping, and sandwich patterns.
 
 ## Why agents need it
+
 Autonomous DeFi agents are vulnerable to front-running and sandwich attacks. This skill provides:
-1. **Threat Detection**: Identification of pending transactions that might manipulate price before your agent's transaction is confirmed.
-2. **Opportunity Identification**: Detection of high-slippage swaps that create arbitrage or liquidation opportunities.
-3. **Fee Intelligence**: Analysis of fee-competition patterns to help agents set optimal transaction fees.
-4. **Connectivity Diagnostics**: Quickly check Hiro API status to ensure your monitoring layer is online.
+
+1. **DEX Call Filtering**: Isolates pending mempool transactions targeting Alex or Bitflow from general mempool noise.
+2. **Fee Intelligence**: Scores each transaction's fee rate as `low`, `medium`, or `high` relative to the live mempool median — not a hardcoded threshold.
+3. **Nonce Competition Detection**: Identifies when multiple pending transactions share the same sender, indicating potential fee-bumping activity.
+4. **Sandwich Pattern Detection**: Flags DEX calls that are bracketed by other pending DEX calls from different senders.
+5. **Connectivity Diagnostics**: Verifies Hiro API status and measures latency before relying on mempool data.
 
 ## Safety notes
-- **Read-only**: This skill only queries the Hiro API and does not broadcast transactions.
-- **Mainnet Recommended**: Mempool volume on testnet is typically too low for meaningful MEV analysis.
-- **Rate Limits**: Respects Hiro API unauthenticated limits (50 RPM) but performs better with a `HIRO_API_KEY`.
+
+- **Read-only**: This skill only queries the Hiro API. It does not sign or broadcast transactions.
+- **Mainnet only**: Testnet mempool volume is too low for meaningful analysis.
+- **Heuristic-based**: All detections are probabilistic. Label findings as "Potential" until confirmed by block inclusion.
+- **Rate limits**: Respects Hiro API unauthenticated limits. Optionally set `HIRO_API_KEY` as an environment variable to increase rate limits.
 
 ## Commands
 
-### monitor
-Fetch current mempool activity and watch for MEV signatures.
+### scout
+Filter the mempool for pending DEX calls and score their fee impact.
 ```bash
 bun run mev-sentry/mev-sentry.ts scout [--limit 50]
 ```
 
 ### analyze
-Perform deep analysis on a specific transaction or the top of the mempool to detect sandwich or front-running patterns.
+Run MEV heuristics on a specific transaction: fee vs median, nonce competition, fee-bumping, sandwich risk.
 ```bash
-bun run mev-sentry/mev-sentry.ts analyze [--txid <tx_id>]
+bun run mev-sentry/mev-sentry.ts analyze --txid <tx_id>
+```
+
+### scan
+Single mempool pass that surfaces DEX calls with elevated fee rates as alerts.
+```bash
+bun run mev-sentry/mev-sentry.ts scan
 ```
 
 ### doctor
-Check connectivity to the Hiro API and return current network status.
+Check Hiro API connectivity and return current network status.
 ```bash
 bun run mev-sentry/mev-sentry.ts doctor
 ```
 
-## Output contract
-All outputs are flat JSON to stdout.
+## Impact scoring
 
-### scout output:
-```json
-{
-  "mempool_size": 142,
-  "high_value_calls": [
-    {
-      "tx_id": "0x...",
-      "sender": "SP...",
-      "contract": "SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.fixed-weight-pool-v1-01",
-      "function": "swap-x-for-y",
-      "fee_rate": 5000,
-      "estimated_impact": "high"
-    }
-  ],
-  "timestamp": "2026-03-30T22:45:00.000Z"
-}
-```
+`estimated_impact` is derived from the transaction's fee rate relative to the current mempool median:
 
-### doctor output:
-```json
-{
-  "status": "healthy",
-  "latency": "150ms",
-  "network": 1,
-  "chain_tip": 145000,
-  "timestamp": "2026-03-30T22:45:20.000Z"
-}
-```
+| Tier   | Condition                        |
+|--------|----------------------------------|
+| `high`   | fee_rate > median × 3          |
+| `medium` | fee_rate > median × 1.5        |
+| `low`    | fee_rate ≤ median × 1.5        |
 
 ## Known constraints
-- Polling frequency is limited by API rate limits.
-- Does not currently support WebSocket streaming (polling only).
-- MEV detection is heuristic-based and may produce false positives.
+
+- Does not support WebSocket streaming (polling only via repeated `scan` calls).
+- Sandwich detection is structural (bracketing DEX calls) — it does not decode swap amounts or slippage parameters.
+- Nonce competition relies on sender address matching, not full nonce sequence analysis.
+- All detections are heuristic and may produce false positives.

@@ -1,57 +1,107 @@
 ---
 name: mev-sentry-agent
 skill: mev-sentry
-description: "Mempool MEV monitor agent — evaluates front-running risks and high-slippage opportunities. Read-only; no wallet required."
+description: "Stacks mempool DEX call scanner — detects fee-competition patterns, nonce contention, and sandwich risk on Alex and Bitflow. Read-only; no wallet required."
 ---
-
 # Agent Behavior — MEV Sentry
 
 ## Decision order
 
-1. **Scout Phase**: Call `scout` to get an overview of the mempool.
-2. **Identification Phase**: Identify any `contract_call` transactions targeting Alex or Bitflow DEXs.
-3. **Analysis Phase**: For high-fee DEX calls, run `analyze` to check for competing nonces or fee-bumping patterns.
-4. **Risk Assessment**: If a transaction has a fee rate significantly higher than the current "high" estimate, flag it as a potential front-run attempt.
-5. **Opportunity Phase**: Identify swaps with low slippage protection that are vulnerable to sandwiching.
-6. **Reporting**: Surface findings to the user or downstream execution agents (e.g., a `yield-optimizer` or `safe-swapper`).
+1. **Scout Phase**: Call `scout` to get an overview of pending DEX calls and the current mempool median fee rate.
+2. **Identification Phase**: Review `high_value_calls` — any `contract_call` targeting Alex or Bitflow with `estimated_impact` of `medium` or `high`.
+3. **Analysis Phase**: For flagged transactions, run `analyze --txid <tx_id>` to check nonce competition, fee-bumping patterns, and sandwich risk.
+4. **Risk Assessment**: Flag transactions where `nonce_competition.fee_bumping_detected` is true or `sandwich_risk.flagged` is true as potential MEV activity.
+5. **Reporting**: Surface findings to the user or downstream agents (e.g., `yield-optimizer`, `safe-swapper`). Label all detections as "Potential" until confirmed by block inclusion.
 
 ## Guardrails
 
 - **Read-Only Enforcement**: This agent never signs or broadcasts transactions. It is purely an intelligence layer.
-- **Rate Limit Awareness**: Default polling interval is 10 seconds to avoid API throttling.
-- **Privacy**: Never log full transaction arguments if they contain sensitive data (though mempool data is public).
-- **False Positive Handling**: Label all detected patterns as "Potential" MEV until confirmed by a block inclusion.
-- **Mainnet Only**: Refuse to operate on Testnet unless explicitly overridden, due to lack of meaningful data.
+- **Mainnet Only**: Do not run on testnet — mempool volume is too low for meaningful analysis.
+- **False Positive Handling**: All detections are heuristic-based. Label findings as "Potential MEV" until on-chain confirmation.
+- **Privacy**: Never log full transaction arguments, even though mempool data is public.
 
 ## Output contract
 
-All commands return structured JSON to stdout.
+All commands return structured JSON to stdout. All errors return `{ "error": "descriptive message" }`.
 
-**scout output:**
+### `scout` output
 ```json
 {
-  "mempool_size": "number",
+  "mempool_size": 1257,
+  "median_fee_rate": 800,
+  "dex_calls_found": 3,
   "high_value_calls": [
     {
-      "tx_id": "string",
-      "sender": "string",
-      "contract": "string",
-      "function": "string",
-      "fee_rate": "number",
-      "estimated_impact": "string (low | medium | high)"
+      "tx_id": "0x...",
+      "sender": "SP...",
+      "contract": "SP102V8P0F7JX67ARQ77WEA3D3CFB5XW39REDT0AM.bitflow-core",
+      "function": "swap-x-for-y",
+      "fee_rate": 2800,
+      "estimated_impact": "high"
     }
   ],
-  "timestamp": "ISO 8601"
+  "timestamp": "2026-04-08T07:00:00.000Z"
+}
+```
+
+### `analyze` output
+```json
+{
+  "tx_id": "0x...",
+  "sender": "SP...",
+  "fee_rate": 2800,
+  "median_mempool_fee_rate": 800,
+  "fee_vs_median": "350.0%",
+  "impact": "high",
+  "is_dex_call": true,
+  "nonce_competition": {
+    "competing_tx_count": 2,
+    "fee_bumping_detected": true
+  },
+  "sandwich_risk": {
+    "bracketing_dex_calls": 2,
+    "flagged": true
+  },
+  "type": "contract_call",
+  "timestamp": "2026-04-08T07:00:01.000Z"
+}
+```
+
+### `scan` output
+```json
+{
+  "status": "complete",
+  "mempool_size": 1257,
+  "median_fee_rate": 800,
+  "alerts_count": 1,
+  "alerts": [
+    {
+      "tx_id": "0x...",
+      "sender": "SP...",
+      "contract": "SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9.fixed-weight-pool-v1-01",
+      "function": "swap-x-for-y",
+      "fee_rate": 2800,
+      "impact": "high"
+    }
+  ],
+  "timestamp": "2026-04-08T07:00:02.000Z"
+}
+```
+
+### `doctor` output
+```json
+{
+  "status": "healthy",
+  "latency": "142ms",
+  "network": 1,
+  "chain_tip": 167432,
+  "timestamp": "2026-04-08T07:00:03.000Z"
 }
 ```
 
 ## On error
 
-- Errors are returned as JSON: `{ "error": "descriptive message" }`
-- Common errors: "API connection failed", "Rate limit exceeded", "Invalid transaction ID".
-- If the Hiro API is unreachable, the agent should wait and retry rather than crashing.
-
-## On success
-
-- Report the current mempool state and any detected signatures.
-- Include a list of "Alerts" for immediate attention by the operator.
+All errors exit with code 1 and return:
+```json
+{ "error": "descriptive message" }
+```
