@@ -1,8 +1,9 @@
 ---
+name: hodlmm-auto-rebalancer
+description: "Autonomously rebalances HODLMM LP positions by moving liquidity to active bins."
 metadata:
-  name: hodlmm-auto-rebalancer
-  description: "Autonomously rebalances HODLMM LP positions by moving liquidity to active bins."
   author: "YOUR_GITHUB_USERNAME"
+  entry: "hodlmm-auto-rebalancer/hodlmm-auto-rebalancer.ts"
   version: "1.0.0"
   tags: "Trading, Yield, HODLMM"
   requires: "STACKS_PRIVATE_KEY, ROUTER_ADDRESS"
