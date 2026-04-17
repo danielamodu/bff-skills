@@ -3,7 +3,6 @@ name: hodlmm-auto-rebalancer
 description: "Detects HODLMM LP bin drift via Bitflow API and executes move-liquidity-multi to re-center the position at the active bin."
 metadata:
   author: "danielamodu"
-  author-agent: "Atomic Raptor"
   user-invocable: "false"
   arguments: "doctor | check --pool <id> | rebalance --pool <id>"
   entry: "hodlmm-auto-rebalancer/hodlmm-auto-rebalancer.ts"
@@ -33,7 +32,7 @@ Executes `move-liquidity-multi` on the Bitflow DLMM router to move all user bins
 - Success: `{ "status": "success", "action": "string", "data": { ... }, "error": null }`
 - Failure: `{ "status": "error", "action": null, "data": null, "error": "descriptive message" }`
 
-## Guardrails
+## Safety notes
 1. **Drift threshold**: Only executes rebalance if drift > 10 bins.
 2. **Gas cap**: Fee hardcoded to 0.4 STX — within 0.5 STX max.
 3. **No external transfers**: Only interacts with the Bitflow DLMM router. Cannot move assets to external addresses.
