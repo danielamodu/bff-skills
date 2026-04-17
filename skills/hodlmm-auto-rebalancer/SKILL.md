@@ -1,38 +1,41 @@
 ---
 name: hodlmm-auto-rebalancer
-description: "Autonomously rebalances HODLMM LP positions by moving liquidity to active bins."
+description: "Detects HODLMM LP bin drift via Bitflow API and executes move-liquidity-multi to re-center the position at the active bin."
 metadata:
   author: "danielamodu"
-  entry: "hodlmm-auto-rebalancer/hodlmm-auto-rebalancer.ts"
+  author-agent: "Atomic Raptor"
   user-invocable: "false"
-  version: "1.0.0"
-  tags: "Trading, Yield, HODLMM"
-  requires: "STACKS_PRIVATE_KEY, ROUTER_ADDRESS"
+  arguments: "doctor | check --pool <id> | rebalance --pool <id>"
+  entry: "hodlmm-auto-rebalancer/hodlmm-auto-rebalancer.ts"
+  requires: "STACKS_PRIVATE_KEY, ROUTER_ADDRESS, STX_ADDRESS"
+  tags: "defi, write, hodlmm, yield, mainnet-only"
 ---
 
 ## What it does
-This skill monitors LP positions on HODLMM (Discretized Liquidity AMM) to detect bin drift. When the active market bin moves significantly away from the user's liquidity bin, the agent automatically executes a `move-liquidity` transaction to re-center the position and maximize yield efficiency.
+Monitors an active HODLMM LP position for bin drift. When the active market bin has moved more than 10 bins away from the user's weighted liquidity center, the skill executes a `move-liquidity-multi` transaction via the Bitflow DLMM router to re-center the position and restore fee-earning capacity.
 
 ## Why agents need it
-Autonomous agents need this to maintain "In-the-money" liquidity without manual intervention. Since HODLMM yield is only generated when price is within the active bin, a passive position can quickly stop earning fees; this skill ensures the agent remains productive 24/7.
-
-## Safety notes
-This skill requires a private key to sign mainnet transactions. It only interacts with the Bitflow DLMM router to reallocate existing liquidity. It cannot withdraw funds to external addresses. Users should only keep enough STX in the wallet to cover transaction fees.
+HODLMM yield is only generated when price is within the active bin. A passive position stops earning fees the moment the market drifts past the deployed range. This skill closes the loop that every existing HODLMM read skill leaves open — drift detection without execution. It is the only skill that directly calls the HODLMM write path and keeps the agent's capital productive 24/7.
 
 ## Commands
-
 ### doctor
-Check environment and connectivity.
+Validates environment variables and confirms Bitflow API connectivity.
 
 ### check
-Check if the current LP position has drifted from the active bin.
-- `p, --pool`: The HODLMM pool ID to check.
+Fetches the current active bin and user position from the Bitflow API. Computes weighted liquidity center and drift. Returns `rebalance_required` or `hold`.
+- `-p, --pool <id>`: Pool identifier (e.g. `dlmm_1`)
 
 ### rebalance
-Execute a transaction to move liquidity to the current active bin.
-- `p, --pool`: The HODLMM pool ID to rebalance.
+Executes `move-liquidity-multi` on the Bitflow DLMM router to move all user bins to the current active bin.
+- `-p, --pool <id>`: Pool identifier (e.g. `dlmm_1`)
 
 ## Output contract
-All commands return a JSON object:
 - Success: `{ "status": "success", "action": "string", "data": { ... }, "error": null }`
-- Failure: `{ "error": "descriptive message" }`
+- Failure: `{ "status": "error", "action": null, "data": null, "error": "descriptive message" }`
+
+## Guardrails
+1. **Drift threshold**: Only executes rebalance if drift > 10 bins.
+2. **Gas cap**: Fee hardcoded to 0.4 STX — within 0.5 STX max.
+3. **No external transfers**: Only interacts with the Bitflow DLMM router. Cannot move assets to external addresses.
+4. **Empty position guard**: Exits safely if no active position is found.
+5. **Env guard**: Refuses execution if any required env var is missing.
