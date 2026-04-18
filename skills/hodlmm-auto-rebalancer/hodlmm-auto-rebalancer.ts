@@ -11,16 +11,24 @@ import {
   uintCV,
   contractPrincipalCV,
 } from '@stacks/transactions';
-import { StacksMainnet } from '@stacks/network';
+import { STACKS_MAINNET } from '@stacks/network';
 
 const BITFLOW_API = "https://api.bitflow.finance/api/v1";
 const ROUTER_CONTRACT_NAME = "dlmm-liquidity-router-v-0-1";
 const DRIFT_THRESHOLD = 10;
+const MAX_FEE = 400000n;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
   return res.json() as Promise<T>;
+}
+
+async function getSTXBalance(address: string): Promise<bigint> {
+  const res = await fetchJson<{ balance: string }>(
+    `https://api.hiro.so/extended/v1/address/${address}/stx`
+  );
+  return BigInt(res.balance);
 }
 
 interface PoolInfo {
@@ -57,17 +65,32 @@ program
 
     let apiReachable = false;
     let poolCount = 0;
+    let balanceOk = false;
+
     try {
       const data = await fetchJson<{ data: unknown[] }>(`${BITFLOW_API}/hodlmm/pools`);
       apiReachable = true;
       poolCount = data.data?.length ?? 0;
     } catch (_) {}
 
+    if (process.env.STX_ADDRESS) {
+      try {
+        const balance = await getSTXBalance(process.env.STX_ADDRESS);
+        balanceOk = balance >= MAX_FEE;
+      } catch (_) {}
+    }
+
+    const allGood = Object.values(envCheck).every(Boolean) && apiReachable && balanceOk;
+
     console.log(JSON.stringify({
-      status: Object.values(envCheck).every(Boolean) && apiReachable ? "success" : "error",
+      status: allGood ? "success" : "error",
       env: envCheck,
       connectivity: {
         bitflow_api: apiReachable ? `reachable — ${poolCount} pools` : "unreachable",
+      },
+      balance: {
+        sufficient_for_gas: balanceOk,
+        required_microSTX: MAX_FEE.toString(),
       },
       network: "mainnet",
     }));
@@ -99,7 +122,6 @@ program
         return;
       }
 
-      // Find user's liquidity center (weighted average bin)
       const totalAmount = userBins.reduce((sum, b) => sum + b.amount, 0);
       const weightedCenter = totalAmount > 0
         ? Math.round(userBins.reduce((sum, b) => sum + b.bin_id * b.amount, 0) / totalAmount)
@@ -137,6 +159,11 @@ program
       if (!process.env.ROUTER_ADDRESS) throw new Error("Missing ROUTER_ADDRESS");
       if (!process.env.STX_ADDRESS) throw new Error("Missing STX_ADDRESS");
 
+      const balance = await getSTXBalance(process.env.STX_ADDRESS);
+      if (balance < MAX_FEE) {
+        throw new Error(`Insufficient STX balance. Need ${MAX_FEE} microSTX, have ${balance}`);
+      }
+
       const [pool, position] = await Promise.all([
         fetchJson<PoolInfo>(`${BITFLOW_API}/hodlmm/pools/${options.pool}`),
         fetchJson<BinListResponse>(`${BITFLOW_API}/hodlmm/pools/${options.pool}/positions/${process.env.STX_ADDRESS}`),
@@ -147,13 +174,27 @@ program
 
       if (userBins.length === 0) throw new Error("No active position to rebalance");
 
+      const totalAmount = userBins.reduce((sum, b) => sum + b.amount, 0);
+      const weightedCenter = Math.round(
+        userBins.reduce((sum, b) => sum + b.bin_id * b.amount, 0) / totalAmount
+      );
+      const drift = Math.abs(activeBin - weightedCenter);
+
+      if (drift <= DRIFT_THRESHOLD) {
+        console.log(JSON.stringify({
+          status: "success",
+          action: "hold",
+          data: { activeBin, drift, message: "Drift within threshold. No rebalance needed." },
+          error: null,
+        }));
+        return;
+      }
+
       const [routerAddress] = process.env.ROUTER_ADDRESS.split('.');
       const [poolContractAddress, poolContractName] = pool.contract_address.split('.');
       const [xAddress, xName] = pool.token_x_contract.split('.');
       const [yAddress, yName] = pool.token_y_contract.split('.');
 
-      // Build positions list for move-liquidity-multi
-      // Move each user bin to the active bin
       const positions = userBins.map(bin => tupleCV({
         'pool-trait': contractPrincipalCV(poolContractAddress, poolContractName),
         'x-token-trait': contractPrincipalCV(xAddress, xName),
@@ -166,7 +207,6 @@ program
         'max-y-liquidity-fee': uintCV(1000000),
       }));
 
-      const network = new StacksMainnet();
       const txOptions = {
         contractAddress: routerAddress,
         contractName: ROUTER_CONTRACT_NAME,
@@ -174,15 +214,17 @@ program
         functionArgs: [listCV(positions)],
         senderKey: process.env.STACKS_PRIVATE_KEY,
         validateWithAbi: false,
-        network,
-        postConditionMode: PostConditionMode.Allow, // Allow mode — liquidity reallocation within protocol
+        network: STACKS_MAINNET,
+        // Allow mode: router delegates to dlmm-core; no direct token transfer from sender.
+        // @stacks/transactions v7 removed makeStandardSTXPostCondition.
+        postConditionMode: PostConditionMode.Allow,
         postConditions: [],
         anchorMode: AnchorMode.Any,
-        fee: 400000, // 0.4 STX — within 0.5 STX cap
+        fee: Number(MAX_FEE),
       };
 
       const transaction = await makeContractCall(txOptions);
-      const broadcastResponse = await broadcastTransaction(transaction, network);
+      const broadcastResponse = await broadcastTransaction({ transaction, network: STACKS_MAINNET });
 
       console.log(JSON.stringify({
         status: "success",
